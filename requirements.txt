@@ -1,0 +1,9 @@
+SQLAlchemy
+Werkzeug
+Flask-Login
+whisper
+openai-whisper
+google-generativeai
+protobuf
+Flask
+Flask-SocketIO
