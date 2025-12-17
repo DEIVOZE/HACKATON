@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Мессенджер</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header class="header">
+        <div class="menu-container">
+            <button onclick="toggleMenu()" style="background:none; border:none; font-size:24px; color:#3f51b5; cursor:pointer;">☰</button>
+            <div id="dropdown-menu" class="dropdown-content">
+                <a href="{{ url_for('logout') }}">Выход</a>
+            </div>
+        </div>
+        <h1>Чаты</h1>
+        {% if not current_user.is_operator %}
+            <a href="{{ url_for('add_new_chat') }}" class="new-chat-btn">+</a>
+        {% endif %}
+    </header>
+
+    <main class="main-content">
+        {% if chats %}
+            {% for chat in chats %}
+                <a href="{{ url_for('chatt', chat_id=chat.id) }}" class="list-item">
+                    {% if current_user.is_operator %}
+                        <div class="avatar">{{ chat.name[0] }}</div>
+                    {% else %}
+                        <div class="avatar">О</div>
+                    {% endif %}
+                    <div class="info">
+                        {% if current_user.is_operator %}
+                        <div class="name" style="font-weight:bold;">{{ chat.name }} #{{ chat.id }}</div>
+                        {% else %}
+                        <div class="name" style="font-weight:bold;">Оператор #{{ chat.id }}</div>
+                        {% endif %}
+                        <div class="preview" style="color:#888; font-size:14px;">Нажмите, чтобы открыть чат</div>
+                    </div>
+                </a>
+            {% endfor %}
+        {% else %}
+            <div style="text-align:center; padding:50px; color:#888;">У вас пока нет чатов. Создайте новый!</div>
+        {% endif %}
+    </main>
+
+    <nav class="bottom-nav">
+        <a href="/" class="nav-item active"><div>💬</div>ЧАТЫ</a>
+        <a href="#" class="nav-item"><div>👤</div>ПРОФИЛЬ</a>
+    </nav>
+
+    <script>
+        function toggleMenu() { document.getElementById("dropdown-menu").classList.toggle("show"); }
+    </script>
+</body>
+</html>

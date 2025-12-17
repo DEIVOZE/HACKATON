@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Чат #{{ chat_id }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+</head>
+<body>
+
+<header class="header">
+    <div class="menu-container">
+        <a href="{{ url_for('index') }}" style="text-decoration:none; font-size:20px; color:#3f51b5;">←</a>
+    </div>
+
+    <h1>Чат №{{ chat_id }}</h1>
+
+    <div class="header-actions" style="position: absolute; right: 15px; display: flex; gap: 10px;">
+        <label class="switch" title="Автоответчик ИИ">
+        <input type="checkbox" id="ai-toggle" onchange="toggleAI(this)" {{ 'checked' if chat.is_ai_active else '' }}>
+        <span class="slider round"></span>
+        </label>
+
+        <a href="{{ url_for('download_report', chat_id=chat_id) }}" class="action-btn" title="Скачать отчет">
+            📄
+        </a>
+
+        <button onclick="document.getElementById('audio-upload').click()" class="call-btn action-btn">
+            📞
+        </button>
+        <input type="file" id="audio-upload" style="display: none;" accept="audio/*" onchange="handleAudioSelect(this)">
+    </div>
+</header>
+
+<div class="chat-container">
+    <main class="messages-area" id="messages-box">
+    {% for msg in messages %}
+        {% set is_mine = (current_user.is_operator and msg.sender_id == 0) or (msg.sender_id == current_user.id) %}
+        <div class="message-row {{ 'right' if is_mine else 'left' }}">
+            <div class="bubble">
+                {{ msg.content }}
+                <div style="font-size: 10px; opacity: 0.5; text-align: right;">
+                    {{ msg.created_at.strftime('%H:%M') }}
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+</main>
+
+    <div class="chat-footer">
+        <input type="text" id="msg-input" class="chat-input" placeholder="Ваше сообщение..." autocomplete="off">
+        <button id="send-btn" class="send-btn">➤</button>
+    </div>
+</div>
+
+<script>
+    const socket = io();
+    const chat_id = "{{ chat_id }}";
+    const current_user_id = "{{ current_user.id }}";
+    const msgInput = document.getElementById('msg-input');
+    const sendBtn = document.getElementById('send-btn');
+    const messagesBox = document.getElementById('messages-box');
+
+    socket.on('connect', () => {
+        socket.emit('join', {'chat_id': chat_id});
+    });
+
+    const scrollDown = () => {
+        messagesBox.scrollTop = messagesBox.scrollHeight;
+    };
+    scrollDown();
+
+    const sendMessage = () => {
+        const text = msgInput.value.trim();
+        if (text) {
+            socket.emit('send_msg_rpc', {'text': text, 'chat_id': chat_id});
+            msgInput.value = '';
+        }
+    };
+
+    sendBtn.onclick = sendMessage;
+    msgInput.onkeypress = (e) => {
+        if (e.key === 'Enter') sendMessage();
+    };
+
+    const isCurrentOperator = {{ 'true' if current_user.is_operator else 'false' }};
+
+    socket.on('render_msg', (data) => {
+        const div = document.createElement('div');
+
+        const isMy = (isCurrentOperator && data.sender_id == 0) || (data.sender_id == current_user_id);
+
+        div.className = `message-row ${isMy ? 'right' : 'left'}`;
+        div.innerHTML = `
+            <div class="bubble">
+                ${data.content}
+                <div style="font-size: 10px; opacity: 0.5; text-align: right;">${data.time}</div>
+            </div>
+        `;
+    messagesBox.appendChild(div);
+    scrollDown();
+});
+
+    async function handleAudioSelect(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    // 1. Находим элементы
+    const callBtn = document.querySelector('.call-btn');
+    const msgInput = document.getElementById('msg-input');
+    const sendBtn = document.getElementById('send-btn');
+    const messagesBox = document.getElementById('messages-box');
+
+    // 2. БЛОКИРОВКА ИНТЕРФЕЙСА
+    callBtn.innerText = "⏳"; // Меняем трубку на часы
+    callBtn.style.pointerEvents = "none"; // Запрещаем повторный клик
+    msgInput.disabled = true;
+    msgInput.placeholder = "Идет распознавание звонка...";
+    sendBtn.disabled = true;
+
+    // Добавляем временный индикатор загрузки в чат
+    const loaderId = "temp-loader-" + Date.now();
+    const loaderDiv = document.createElement('div');
+    loaderDiv.id = loaderId;
+    loaderDiv.className = "message-row left";
+    loaderDiv.innerHTML = `<div class="bubble" style="background:#f0f0f0; color:#888;"><i>☁️ Анализируем аудио... подождите</i></div>`;
+    messagesBox.appendChild(loaderDiv);
+    messagesBox.scrollTop = messagesBox.scrollHeight;
+
+    // 3. ОТПРАВКА
+    const formData = new FormData();
+    formData.append('audio', file);
+    formData.append('chat_id', "{{ chat_id }}");
+
+    try {
+        const response = await fetch('/upload_audio', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) throw new Error("Ошибка сервера");
+
+    } catch (e) {
+        alert("Произошла ошибка при транскрибации");
+    } finally {
+        // 4. РАЗБЛОКИРОВКА
+        callBtn.innerText = "📞";
+        callBtn.style.pointerEvents = "auto";
+        msgInput.disabled = false;
+        msgInput.placeholder = "Ваше сообщение...";
+        sendBtn.disabled = false;
+
+        // Удаляем индикатор загрузки (когда придут реальные сообщения от SocketIO)
+        loaderDiv.remove();
+        input.value = ""; // Сбрасываем выбор файла
+    }
+}
+    function toggleAI(checkbox) {
+    fetch(`/toggle_ai/${chat_id}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({active: checkbox.checked})
+    });
+}
+</script>
+</body>
+</html>
